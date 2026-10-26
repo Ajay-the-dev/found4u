@@ -1,0 +1,299 @@
+rules_version = '2';
+
+// FoundIt — Firestore security rules
+//
+// SHARED DATABASE: every FoundIt collection is prefixed `lofu_`. A project has ONE ruleset per
+// database, so deploying this file replaces the rules of every other app in it. Merge the
+// `match` blocks and helper functions below into your existing rules file instead (rename any
+// helper that clashes, e.g. signedIn/uid/rank), and make sure no broad `match /{document=**}`
+// rule in your file grants access to `lofu_*` documents — rules are OR-ed together.
+//
+// Role ranks: owner (4) > admin (3) > staff (2) > member (1).
+// Membership lives at lofu_organizations/{orgId}/lofu_members/{uid}.
+// Anything written by Cloud Functions (notifications, mail, system matches)
+// uses the Admin SDK and bypasses these rules.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ───────────── helpers ─────────────
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function isRealUser() {
+      return signedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+    function myEmail() { return request.auth.token.email.lower(); }
+
+    function rank(role) {
+      return {'owner': 4, 'admin': 3, 'staff': 2, 'member': 1}.get(role, 0);
+    }
+    function memberPath(orgId) {
+      return /databases/$(database)/documents/lofu_organizations/$(orgId)/lofu_members/$(request.auth.uid);
+    }
+    function isMember(orgId) {
+      return isRealUser() && orgId != null && exists(memberPath(orgId));
+    }
+    function roleIn(orgId) { return get(memberPath(orgId)).data.role; }
+    function hasRole(orgId, minRole) {
+      return isMember(orgId) && rank(roleIn(orgId)) >= rank(minRole);
+    }
+
+    function incoming() { return request.resource.data; }
+    function changed() { return incoming().diff(resource.data).affectedKeys(); }
+    function unchanged(fields) { return !changed().hasAny(fields); }
+    function onlyChanges(fields) { return changed().hasOnly(fields); }
+    function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function optStr(v, max) { return v == null || (v is string && v.size() <= max); }
+
+    function itemStatuses() { return ['open', 'under_review', 'matched', 'claimed', 'resolved']; }
+
+    // ───────────── users ─────────────
+    match /lofu_users/{userId} {
+      allow read: if signedIn() && uid() == userId;
+      allow create: if isRealUser() && uid() == userId && incoming().uid == userId;
+      allow update: if isRealUser() && uid() == userId && unchanged(['uid', 'createdAt']);
+      allow delete: if false;
+    }
+
+    // ───────────── organizations & members ─────────────
+    match /lofu_organizations/{orgId} {
+      allow read: if isMember(orgId);
+      allow create: if isRealUser()
+        && incoming().ownerId == uid()
+        && str(incoming().name, 2, 120)
+        && optStr(incoming().description, 1000);
+      allow update: if hasRole(orgId, 'admin')
+        && unchanged(['ownerId', 'createdAt'])
+        && str(incoming().name, 2, 120);
+      allow delete: if hasRole(orgId, 'owner');
+
+      match /lofu_members/{memberId} {
+        function orgPath() { return /databases/$(database)/documents/lofu_organizations/$(orgId); }
+
+        // The founder creates their own owner record in the same batch as the org.
+        function isFounding() {
+          return incoming().role == 'owner'
+            && !exists(orgPath())
+            && getAfter(orgPath()).data.ownerId == uid();
+        }
+        // Everyone else joins through a pending invitation addressed to their verified email.
+        function hasValidInvite() {
+          let inv = get(/databases/$(database)/documents/lofu_invitations/$(incoming().inviteToken)).data;
+          return inv.orgId == orgId
+            && inv.status == 'pending'
+            && inv.role == incoming().role
+            && inv.email == myEmail()
+            && request.auth.token.email_verified == true
+            && inv.expiresAt > request.time;
+        }
+
+        allow read: if isMember(orgId);
+        allow create: if isRealUser()
+          && memberId == uid()
+          && incoming().uid == uid()
+          && incoming().orgId == orgId
+          && (isFounding() || hasValidInvite());
+        // Admins may change roles of people ranked below them, up to their own rank.
+        // Nobody can create a second owner or touch the owner record.
+        allow update: if hasRole(orgId, 'admin')
+          && memberId != uid()
+          && onlyChanges(['role', 'updatedAt', 'updatedBy'])
+          && incoming().role in ['admin', 'staff', 'member']
+          && rank(roleIn(orgId)) > rank(resource.data.role)
+          && rank(incoming().role) <= rank(roleIn(orgId));
+        allow delete: if (memberId == uid() && resource.data.role != 'owner')
+          || (hasRole(orgId, 'admin') && rank(roleIn(orgId)) > rank(resource.data.role));
+      }
+    }
+
+    // Lets a user list their own memberships across all organizations.
+    match /{path=**}/lofu_members/{memberId} {
+      allow read: if isRealUser() && resource.data.uid == uid();
+    }
+
+    // ───────────── invitations (doc id = secret token) ─────────────
+    match /lofu_invitations/{token} {
+      allow get: if isRealUser();
+      allow list: if isRealUser()
+        && (resource.data.email == myEmail() || hasRole(resource.data.orgId, 'admin'));
+      allow create: if hasRole(incoming().orgId, 'admin')
+        && token.size() >= 24
+        && incoming().invitedBy == uid()
+        && incoming().status == 'pending'
+        && incoming().role in ['admin', 'staff', 'member']
+        && rank(incoming().role) <= rank(roleIn(incoming().orgId))
+        && str(incoming().email, 3, 254)
+        && incoming().email == incoming().email.lower()
+        && incoming().expiresAt is timestamp;
+      allow update: if
+        (hasRole(resource.data.orgId, 'admin')
+          && onlyChanges(['status', 'updatedAt'])
+          && incoming().status == 'revoked')
+        || (isRealUser()
+          && resource.data.status == 'pending'
+          && resource.data.email == myEmail()
+          && onlyChanges(['status', 'acceptedBy', 'acceptedAt'])
+          && incoming().status == 'accepted'
+          && incoming().acceptedBy == uid()
+          && existsAfter(/databases/$(database)/documents/lofu_organizations/$(resource.data.orgId)/lofu_members/$(uid())));
+      allow delete: if hasRole(resource.data.orgId, 'admin');
+    }
+
+    // ───────────── lost / found items ─────────────
+    match /lofu_items/{itemId} {
+      allow read: if isRealUser()
+        && (resource.data.orgId == null
+          || resource.data.reporterId == uid()
+          || isMember(resource.data.orgId));
+      allow create: if isRealUser()
+        && incoming().reporterId == uid()
+        && incoming().type in ['lost', 'found']
+        && incoming().status == 'open'
+        && str(incoming().title, 2, 120)
+        && str(incoming().category, 1, 40)
+        && optStr(incoming().description, 2000)
+        && incoming().photos is list && incoming().photos.size() <= 6
+        && (incoming().orgId == null || isMember(incoming().orgId));
+      allow update: if isRealUser()
+        && unchanged(['type', 'reporterId', 'orgId', 'createdAt'])
+        && incoming().updatedBy == uid()
+        && incoming().status in itemStatuses()
+        && str(incoming().title, 2, 120)
+        && incoming().photos.size() <= 6
+        && (resource.data.reporterId == uid()
+          || (resource.data.orgId != null && hasRole(resource.data.orgId, 'staff')));
+      allow delete: if isRealUser()
+        && (resource.data.reporterId == uid()
+          || (resource.data.orgId != null && hasRole(resource.data.orgId, 'admin')));
+    }
+
+    // ───────────── matches (system-generated or created by staff) ─────────────
+    match /lofu_matches/{matchId} {
+      function canSeeMatch(d) {
+        return isRealUser()
+          && (uid() in d.participants || (d.orgId != null && hasRole(d.orgId, 'staff')));
+      }
+      function itemDoc(id) { return get(/databases/$(database)/documents/lofu_items/$(id)).data; }
+
+      allow read: if canSeeMatch(resource.data);
+      allow create: if isRealUser()
+        && incoming().orgId != null
+        && hasRole(incoming().orgId, 'staff')
+        && matchId == incoming().lostItemId + '_' + incoming().foundItemId
+        && incoming().status == 'pending'
+        && incoming().createdBy == uid()
+        && itemDoc(incoming().lostItemId).type == 'lost'
+        && itemDoc(incoming().foundItemId).type == 'found'
+        && itemDoc(incoming().lostItemId).reporterId == incoming().lostOwnerId
+        && itemDoc(incoming().foundItemId).reporterId == incoming().foundReporterId
+        && incoming().participants == [incoming().lostOwnerId, incoming().foundReporterId];
+      allow update: if canSeeMatch(resource.data)
+        && onlyChanges(['status', 'handover', 'updatedAt', 'updatedBy'])
+        && incoming().status in ['pending', 'confirmed', 'dismissed', 'completed']
+        && incoming().updatedBy == uid();
+      allow delete: if false;
+    }
+
+    // ───────────── notifications (written by Cloud Functions) ─────────────
+    match /lofu_notifications/{notificationId} {
+      allow read, delete: if signedIn() && resource.data.userId == uid();
+      allow update: if signedIn() && resource.data.userId == uid() && onlyChanges(['read', 'readAt']);
+      allow create: if false;
+    }
+
+    // ───────────── asset tags ─────────────
+    // Private record: serial numbers, notes, owner details.
+    match /lofu_assets/{assetId} {
+      function canManageAsset(d) {
+        return isRealUser()
+          && (d.ownerId == uid() || (d.orgId != null && hasRole(d.orgId, 'admin')));
+      }
+      allow read: if isRealUser()
+        && (resource.data.ownerId == uid()
+          || (resource.data.orgId != null && hasRole(resource.data.orgId, 'staff')));
+      allow create: if isRealUser()
+        && incoming().ownerId == uid()
+        && assetId.size() >= 8 && assetId.size() <= 32
+        && str(incoming().name, 2, 120)
+        && (incoming().orgId == null || hasRole(incoming().orgId, 'staff'));
+      allow update: if canManageAsset(resource.data)
+        && unchanged(['ownerId', 'orgId', 'createdAt'])
+        && str(incoming().name, 2, 120);
+      allow delete: if canManageAsset(resource.data);
+    }
+
+    // Public projection shown on /scan/:assetId — never contains personal details.
+    match /lofu_publicAssets/{assetId} {
+      function privateAsset() { return get(/databases/$(database)/documents/lofu_assets/$(assetId)).data; }
+      function canManage() {
+        return isRealUser()
+          && (resource.data.ownerId == uid()
+            || (privateAsset().orgId != null && hasRole(privateAsset().orgId, 'admin')));
+      }
+      allow get: if true;
+      allow list: if false;
+      allow create: if isRealUser()
+        && incoming().ownerId == uid()
+        && getAfter(/databases/$(database)/documents/lofu_assets/$(assetId)).data.ownerId == uid();
+      allow update: if canManage() && unchanged(['ownerId']);
+      allow delete: if canManage();
+    }
+
+    // Finder reports from scanned QR tags (finders may be anonymous).
+    match /lofu_scanReports/{reportId} {
+      function publicAsset(id) { return get(/databases/$(database)/documents/lofu_publicAssets/$(id)).data; }
+      allow read: if signedIn()
+        && (resource.data.ownerId == uid() || resource.data.finderId == uid());
+      allow create: if signedIn()
+        && incoming().finderId == uid()
+        && publicAsset(incoming().assetId).active == true
+        && publicAsset(incoming().assetId).ownerId == incoming().ownerId
+        && optStr(incoming().message, 1000)
+        && optStr(incoming().contact, 200);
+      allow update: if signedIn() && resource.data.ownerId == uid() && onlyChanges(['seen', 'seenAt']);
+      allow delete: if signedIn() && resource.data.ownerId == uid();
+    }
+
+    // ───────────── chats ─────────────
+    match /lofu_chats/{chatId} {
+      function contextIsValid(d) {
+        return (d.kind == 'asset'
+            && get(/databases/$(database)/documents/lofu_publicAssets/$(d.refId)).data.ownerId in d.participants)
+          || (d.kind == 'item' && isRealUser()
+            && get(/databases/$(database)/documents/lofu_items/$(d.refId)).data.reporterId in d.participants)
+          || (d.kind == 'match' && isRealUser()
+            && get(/databases/$(database)/documents/lofu_matches/$(d.refId)).data.participants.hasAll(d.participants));
+      }
+      function chatNow() { return get(/databases/$(database)/documents/lofu_chats/$(chatId)).data; }
+      // getAfter() so the first message can be written in the same batch that creates the chat.
+      function chatAfter() { return getAfter(/databases/$(database)/documents/lofu_chats/$(chatId)).data; }
+
+      // `resource == null` allows probing for a deterministic chat id that doesn't exist yet.
+      allow read: if signedIn() && (resource == null || uid() in resource.data.participants);
+      allow create: if signedIn()
+        && incoming().participants is list
+        && incoming().participants.size() == 2
+        && incoming().participants[0] != incoming().participants[1]
+        && uid() in incoming().participants
+        && contextIsValid(incoming());
+      allow update: if signedIn()
+        && uid() in resource.data.participants
+        && unchanged(['participants', 'kind', 'refId', 'createdAt', 'participantInfo']);
+      allow delete: if false;
+
+      match /lofu_messages/{messageId} {
+        allow read: if signedIn() && uid() in chatNow().participants;
+        allow create: if signedIn()
+          && uid() in chatAfter().participants
+          && incoming().senderId == uid()
+          && optStr(incoming().text, 2000);
+        allow update, delete: if false;
+      }
+    }
+
+    // Outgoing email queue for the "Trigger Email from Firestore" extension — server only.
+    match /lofu_mail/{mailId} {
+      allow read, write: if false;
+    }
+  }
+}

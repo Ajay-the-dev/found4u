@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "your-project"
+  },
+  "targets": {
+    "your-project": {
+      "hosting": {
+        "lofu": ["your-lofu-site"]
+      }
+    }
+  }
+}
