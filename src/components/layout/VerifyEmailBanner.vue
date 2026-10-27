@@ -33,9 +33,9 @@ async function recheck() {
 <template>
   <div v-if="auth.needsEmailVerification" class="alert alert-warning rounded-0 border-0 border-bottom mb-0 py-2 d-print-none">
     <div class="container d-flex flex-wrap align-items-center gap-2 small">
-      <i class="bi bi-envelope-exclamation"></i>
-      <span class="me-auto">Please verify <strong>{{ auth.email }}</strong> — it's required to accept organization invitations.</span>
-      <button class="btn btn-sm btn-outline-dark" :disabled="busy" @click="resend">Resend email</button>
+      <span class="d-none d-md-inline-flex stat-icon tone-warning rounded-2 align-items-center justify-content-center" style="width: 1.5rem; height: 1.5rem"><i class="bi bi-envelope-exclamation"></i></span>
+      <span class="me-auto"><span class="d-md-none">Verify <strong>{{ auth.email }}</strong> to join organizations.</span><span class="d-none d-md-inline">Please verify <strong>{{ auth.email }}</strong> — it's required to accept organization invitations.</span></span>
+      <button class="btn btn-sm btn-outline-secondary" :disabled="busy" @click="resend">Resend email</button>
       <button class="btn btn-sm btn-dark" :disabled="busy" @click="recheck">I've verified</button>
     </div>
   </div>

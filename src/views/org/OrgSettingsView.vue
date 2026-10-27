@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useOrgStore } from '@/stores/org'
 import { useUiStore } from '@/stores/ui'
 import { ORG_TYPES, RADIUS_OPTIONS } from '@/utils/constants'
@@ -9,6 +9,7 @@ import MapPicker from '@/components/map/MapPicker.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 const route = useRoute()
+const router = useRouter()
 const org = useOrgStore()
 const ui = useUiStore()
 
@@ -33,6 +34,25 @@ watch(
   },
   { immediate: true },
 )
+
+const isOwner = computed(() => org.roleIn(orgId.value) === 'owner')
+const confirmName = ref('')
+const deleting = ref(false)
+const canDelete = computed(() => current.value && confirmName.value.trim() === current.value.name)
+
+async function deleteOrganization() {
+  if (!canDelete.value) return
+  const name = current.value.name
+  deleting.value = true
+  try {
+    await org.deleteOrg(orgId.value)
+    ui.toast('Organization deleted', 'success', { body: `${name} and all of its data have been removed.` })
+    router.replace({ name: 'orgs' })
+  } catch (err) {
+    ui.error(err, 'Could not delete organization')
+    deleting.value = false
+  }
+}
 
 async function save() {
   if (form.name.trim().length < 2) return ui.toast('Name is too short', 'warning')
@@ -94,5 +114,26 @@ async function save() {
         <button class="btn btn-primary px-4" :disabled="saving"><span v-if="saving" class="spinner-border spinner-border-sm me-2"></span>Save settings</button>
       </div>
     </form>
+
+    <div v-if="hydrated && isOwner" class="card danger-zone mt-5">
+      <div class="card-body">
+        <h2 class="h6 text-danger mb-1"><i class="bi bi-exclamation-octagon me-1"></i>Danger zone</h2>
+        <p class="small text-secondary mb-3">
+          Deleting <strong class="text-body">{{ current?.name }}</strong> permanently removes the organization, its members, pending invitations,
+          all lost &amp; found reports and matches filed under it, and its asset tags. This can't be undone.
+        </p>
+        <label class="form-label" for="confirm-name">Type <strong>{{ current?.name }}</strong> to confirm</label>
+        <div class="d-flex flex-column flex-sm-row gap-2">
+          <input id="confirm-name" v-model="confirmName" class="form-control" autocomplete="off" :disabled="deleting" @keydown.enter.prevent="deleteOrganization" />
+          <button type="button" class="btn btn-danger text-nowrap" :disabled="!canDelete || deleting" @click="deleteOrganization">
+            <span v-if="deleting" class="spinner-border spinner-border-sm me-2"></span>Delete organization
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.danger-zone { border-color: #ffd5dc; }
+</style>

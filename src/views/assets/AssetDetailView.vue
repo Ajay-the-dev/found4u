@@ -92,7 +92,7 @@ async function remove() {
 function downloadPng() {
   const a = document.createElement('a')
   a.href = sticker.value.dataUrl
-  a.download = `foundit-${asset.value.id}.png`
+  a.download = `found4-${asset.value.id}.png`
   a.click()
 }
 

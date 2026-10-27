@@ -68,7 +68,7 @@ async function google() {
   <AuthShell title="Create your account" subtitle="Report items, register QR tags and join your organization.">
     <div v-if="error" class="alert alert-danger small py-2">{{ error }}</div>
     <GoogleButton :busy="busy" @click="google" />
-    <div class="d-flex align-items-center gap-2 my-3 text-secondary small"><hr class="flex-grow-1" />or<hr class="flex-grow-1" /></div>
+    <div class="d-flex align-items-center gap-2 my-3 text-secondary small"><hr class="flex-grow-1 my-0" /><span class="text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.08em">or</span><hr class="flex-grow-1 my-0" /></div>
     <form @submit.prevent="submit">
       <div class="mb-3">
         <label class="form-label" for="name">Full name</label>
@@ -93,7 +93,7 @@ async function google() {
         <label class="form-label" for="confirm">Confirm password</label>
         <input id="confirm" v-model="confirmPassword" type="password" class="form-control" autocomplete="new-password" required />
       </div>
-      <button class="btn btn-primary w-100" :disabled="busy">
+      <button class="btn btn-primary btn-lg w-100" :disabled="busy">
         <span v-if="busy" class="spinner-border spinner-border-sm me-2"></span>Create account
       </button>
     </form>

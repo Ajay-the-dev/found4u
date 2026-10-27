@@ -1,4 +1,6 @@
 import L from 'leaflet'
+// Styles ride along with the map chunk instead of the entry bundle.
+import 'leaflet/dist/leaflet.css'
 
 const TILE_URL = import.meta.env.VITE_MAP_TILE_URL || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const ATTRIBUTION = import.meta.env.VITE_MAP_ATTRIBUTION || '&copy; OpenStreetMap contributors'

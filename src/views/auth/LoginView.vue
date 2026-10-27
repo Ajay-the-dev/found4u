@@ -38,7 +38,7 @@ const google = () => run(() => auth.loginWithGoogle())
   <AuthShell title="Welcome back" subtitle="Sign in to manage your reports, tags and organizations.">
     <div v-if="error" class="alert alert-danger small py-2">{{ error }}</div>
     <GoogleButton :busy="busy" @click="google" />
-    <div class="d-flex align-items-center gap-2 my-3 text-secondary small"><hr class="flex-grow-1" />or<hr class="flex-grow-1" /></div>
+    <div class="d-flex align-items-center gap-2 my-3 text-secondary small"><hr class="flex-grow-1 my-0" /><span class="text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.08em">or</span><hr class="flex-grow-1 my-0" /></div>
     <form @submit.prevent="submit">
       <div class="mb-3">
         <label class="form-label" for="email">Email</label>
@@ -51,12 +51,12 @@ const google = () => run(() => auth.loginWithGoogle())
       <div class="text-end mb-3">
         <RouterLink to="/forgot-password" class="small">Forgot password?</RouterLink>
       </div>
-      <button class="btn btn-primary w-100" :disabled="busy">
+      <button class="btn btn-primary btn-lg w-100" :disabled="busy">
         <span v-if="busy" class="spinner-border spinner-border-sm me-2"></span>Sign in
       </button>
     </form>
     <template #footer>
-      New to FoundIt? <RouterLink :to="{ name: 'register', query: route.query }">Create an account</RouterLink>
+      New to Found4? <RouterLink :to="{ name: 'register', query: route.query }">Create an account</RouterLink>
     </template>
   </AuthShell>
 </template>

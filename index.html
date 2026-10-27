@@ -2,16 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="FoundIt — lost & found for campuses, offices and transit hubs." />
-    <meta name="theme-color" content="#4f46e5" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Found4 — lost & found for campuses, offices and transit hubs." />
+    <meta name="theme-color" content="#e9eef0" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>FoundIt</title>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Found4" />
+    <title>Found4</title>
   </head>
   <body>
     <div id="app">
-      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;color:#6b7280">
-        Loading FoundIt…
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e9eef0">
+        <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#4b7686,#22414f);box-shadow:0 8px 24px rgba(34,65,79,.35);animation:fi-pulse 1.2s ease-in-out infinite"></div>
+        <style>@keyframes fi-pulse{50%{transform:scale(.88);opacity:.7}}</style>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>

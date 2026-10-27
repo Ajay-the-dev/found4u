@@ -16,7 +16,8 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore'
-import { db } from '@/services/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '@/services/firebase'
 import { COL } from '@/utils/collections'
 import { generateToken } from '@/utils/ids'
 import { withId } from '@/utils/firestore'
@@ -171,6 +172,13 @@ export const useOrgStore = defineStore('org', () => {
     return updateDoc(doc(db, COL.organizations, orgId), { ...data, updatedAt: serverTimestamp() })
   }
 
+  // Cascading delete runs server-side (see functions `deleteOrganization`); owner only.
+  async function deleteOrg(orgId) {
+    const { data } = await httpsCallable(functions, 'lofu-deleteOrganization')({ orgId })
+    if (currentOrgId.value === orgId) setCurrentOrg(null)
+    return data
+  }
+
   // ───────────── members ─────────────
   function watchMembers(orgId, onData, onError) {
     return onSnapshot(
@@ -302,6 +310,7 @@ export const useOrgStore = defineStore('org', () => {
     setCurrentOrg,
     createOrg,
     updateOrg,
+    deleteOrg,
     watchMembers,
     changeRole,
     removeMember,

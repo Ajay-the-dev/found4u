@@ -84,7 +84,7 @@ async function toggleNearMe() {
     <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
       <div>
         <h1 class="h3 mb-1">Browse items</h1>
-        <p class="text-secondary small mb-0">
+        <p class="text-secondary small mb-0 d-none d-md-block">
           <i class="bi" :class="org.currentOrg ? 'bi-building' : 'bi-globe2'"></i>
           {{ org.currentOrg ? `${org.currentOrg.name} — members only` : 'Public network' }} · switch workspace from the top bar
         </p>
@@ -95,7 +95,7 @@ async function toggleNearMe() {
       </div>
     </div>
 
-    <div class="card mb-3">
+    <div class="card mb-3 filter-card">
       <div class="card-body row g-2 align-items-center">
         <div class="col-12 col-lg-auto">
           <div class="btn-group w-100" role="group">
@@ -144,7 +144,7 @@ async function toggleNearMe() {
       </p>
     </template>
 
-    <div v-else-if="filtered.length" class="row g-3">
+    <div v-else-if="filtered.length" v-reveal.stagger="{ stagger: 0.04 }" class="row g-3 item-grid">
       <div v-for="item in filtered" :key="item.id" class="col-sm-6 col-lg-4 col-xl-3">
         <ItemCard :item="item" :distance="item._distance ?? null" />
       </div>

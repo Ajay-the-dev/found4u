@@ -126,6 +126,8 @@ export const useItemStore = defineStore('item', () => {
       Object.assign(data, {
         dateFound: form.dateFound,
         currentLocation: form.currentLocation?.trim() || '',
+        // Set when reported via "I found this" on a lost report; the match engine links them.
+        forLostItemId: form.forLostItemId || null,
       })
     }
 

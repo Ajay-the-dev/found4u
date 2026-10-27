@@ -9,6 +9,8 @@ const DEFAULT_RADIUS_M = 1000
 const MAX_SEARCH_RADIUS_M = 10000
 const MAX_MATCHES_PER_ITEM = 10
 const MIN_TEXT_SIMILARITY = 0.2
+// Without a lost pin, an item found this many days after the loss window still counts as "same timeframe".
+const TIMEFRAME_GRACE_DAYS = 3
 
 const STOP_WORDS = new Set(
   'the and with for from that this have has was were are its it my our your their his her a an in on of to at by or near some one'.split(' '),
@@ -19,8 +21,16 @@ function tokens(text = '') {
     text
       .toLowerCase()
       .split(/[^a-z0-9]+/)
-      .filter((t) => t.length > 2 && !STOP_WORDS.has(t)),
+      .filter((t) => t.length > 2 && !STOP_WORDS.has(t))
+      .map(stem),
   )
+}
+
+/** Crude plural folding so "glasses"/"glass" and "keys"/"key" compare equal. */
+function stem(t) {
+  if (t.length > 4 && t.endsWith('es') && /(ss|x|ch|sh)es$/.test(t)) return t.slice(0, -2)
+  if (t.length > 3 && t.endsWith('s') && !t.endsWith('ss')) return t.slice(0, -1)
+  return t
 }
 
 /** Overlap coefficient of the meaningful words in title + description (0…1). */
@@ -47,6 +57,14 @@ function scopesCompatible(a, b) {
 function datesCompatible(lost, found) {
   if (!lost.dateFrom || !found.dateFound) return true
   return found.dateFound >= lost.dateFrom
+}
+
+/** Found inside the lost report's date window (plus a few days' grace). */
+function withinTimeframe(lost, found) {
+  if (!lost.dateFrom || !found.dateFound) return false
+  const end = new Date(`${lost.dateTo || lost.dateFrom}T00:00:00Z`)
+  end.setUTCDate(end.getUTCDate() + TIMEFRAME_GRACE_DAYS)
+  return found.dateFound >= lost.dateFrom && found.dateFound <= end.toISOString().slice(0, 10)
 }
 
 function scoreMatch({ distance, radius, similarity }) {
@@ -76,10 +94,23 @@ function evaluatePair(lost, found) {
   }
 
   // Lost location unknown: fall back to category + timeframe + description overlap.
-  if (!lost.location && similarity >= MIN_TEXT_SIMILARITY) {
+  if (!lost.location && (similarity >= MIN_TEXT_SIMILARITY || withinTimeframe(lost, found))) {
     return { lost, found, reason: 'category', distance: null, score: scoreMatch({ distance: null, similarity }) }
   }
   return null
+}
+
+/**
+ * A finder pressed "I found this" on a specific lost report. Trust the explicit link
+ * over distance/text heuristics, but keep the hard invariants.
+ */
+function directCandidate(lost, found) {
+  if (lost.type !== 'lost' || found.type !== 'found') return null
+  if (lost.reporterId === found.reporterId) return null
+  if (!ACTIVE_STATUSES.includes(lost.status)) return null
+  if (!scopesCompatible(lost, found)) return null
+  const distance = lost.location && found.location ? Math.round(distanceMeters(lost.location, found.location)) : null
+  return { lost, found, reason: 'reported', distance, score: 100 }
 }
 
 /** Queries Firestore for counterpart items of a newly created item and returns ranked candidates. */
@@ -106,24 +137,16 @@ async function findCandidates(db, item) {
     snaps.forEach((snap) => snap.docs.forEach((d) => others.set(d.id, { id: d.id, ...d.data() })))
   }
 
-  // 2. Lost reports without a location, in the same scope.
+  // 2. Lost reports without a location, in the same scope (org items also see the public pool).
+  const scopes = item.orgId ? [item.orgId, null] : [null]
+  const scoped = (build) =>
+    Promise.all(scopes.map((orgId) => build().where('orgId', '==', orgId).limit(100).get())).then((snaps) =>
+      snaps.forEach((snap) => snap.docs.forEach((d) => others.set(d.id, { id: d.id, ...d.data() }))),
+    )
   if (item.type === 'found') {
-    const snap = await items
-      .where('type', '==', 'lost')
-      .where('category', '==', item.category)
-      .where('locationKnown', '==', false)
-      .where('orgId', '==', item.orgId || null)
-      .limit(100)
-      .get()
-    snap.docs.forEach((d) => others.set(d.id, { id: d.id, ...d.data() }))
+    await scoped(() => items.where('type', '==', 'lost').where('category', '==', item.category).where('locationKnown', '==', false))
   } else if (!item.location) {
-    const snap = await items
-      .where('type', '==', 'found')
-      .where('category', '==', item.category)
-      .where('orgId', '==', item.orgId || null)
-      .limit(100)
-      .get()
-    snap.docs.forEach((d) => others.set(d.id, { id: d.id, ...d.data() }))
+    await scoped(() => items.where('type', '==', 'found').where('category', '==', item.category))
   }
 
   const candidates = []
@@ -148,7 +171,9 @@ module.exports = {
   scopesCompatible,
   datesCompatible,
   scoreMatch,
+  withinTimeframe,
   evaluatePair,
+  directCandidate,
   findCandidates,
   formatDistance,
 }

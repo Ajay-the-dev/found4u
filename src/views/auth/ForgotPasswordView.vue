@@ -37,7 +37,7 @@ async function submit() {
         <label class="form-label" for="email">Email</label>
         <input id="email" v-model="email" type="email" class="form-control" autocomplete="email" required />
       </div>
-      <button class="btn btn-primary w-100" :disabled="busy">
+      <button class="btn btn-primary btn-lg w-100" :disabled="busy">
         <span v-if="busy" class="spinner-border spinner-border-sm me-2"></span>Send reset link
       </button>
     </form>

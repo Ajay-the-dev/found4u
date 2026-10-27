@@ -1,15 +1,16 @@
 'use strict'
 
 /**
- * FoundIt Cloud Functions (2nd gen) — deployed as `lofu-<name>` in the `lofu` codebase
+ * Found4 Cloud Functions (2nd gen) — deployed as `lofu-<name>` in the `lofu` codebase
  *
  *  onItemCreated         geofenced match engine: new lost/found item → candidate matches
  *  onMatchCreated        radius alerts: in-app notifications + email to owner, finder, org admins
- *  onMatchUpdated        status lifecycle: confirmed → items "matched", completed → items "claimed"
+ *  onMatchUpdated        status lifecycle: confirmed → items "matched", completed → both items "resolved"
  *  onItemUpdated         tells reporters when staff change their item's status
  *  onInvitationCreated   sends the organization invitation email
  *  onScanReportCreated   alerts an asset owner when their QR tag is scanned (with abuse throttle)
  *  cloudinarySignature   signs Cloudinary uploads so the API secret never reaches the browser
+ *  deleteOrganization    owner-only: deletes an organization and everything scoped to it
  */
 
 const crypto = require('node:crypto')
@@ -22,7 +23,7 @@ const { defineString, defineSecret } = require('firebase-functions/params')
 const logger = require('firebase-functions/logger')
 
 const COL = require('./src/collections')
-const { findCandidates, formatDistance } = require('./src/matching')
+const { findCandidates, directCandidate, formatDistance } = require('./src/matching')
 const { notifyUsers, queueEmail, orgMembersWithRole } = require('./src/notify')
 
 initializeApp()
@@ -30,7 +31,7 @@ const db = getFirestore()
 
 setGlobalOptions({ region: 'us-central1', maxInstances: 10 })
 
-const APP_URL = defineString('APP_URL', { default: 'http://localhost:5173', description: 'Public URL of the FoundIt web app' })
+const APP_URL = defineString('APP_URL', { default: 'http://localhost:5173', description: 'Public URL of the Found4 web app' })
 const MAIL_COLLECTION = defineString('MAIL_COLLECTION', { default: 'lofu_mail', description: 'Collection watched by the Trigger Email extension' })
 const CLOUDINARY_CLOUD_NAME = defineString('CLOUDINARY_CLOUD_NAME', { default: '' })
 const CLOUDINARY_API_KEY = defineString('CLOUDINARY_API_KEY', { default: '' })
@@ -48,6 +49,17 @@ const onItemCreated = onDocumentCreated(`${COL.items}/{itemId}`, async (event) =
   const item = { id: snap.id, ...snap.data() }
 
   const candidates = await findCandidates(db, item)
+
+  // "I found this" from a lost report's page: link the two directly.
+  if (item.type === 'found' && typeof item.forLostItemId === 'string' && item.forLostItemId) {
+    const lostSnap = await db.collection(COL.items).doc(item.forLostItemId).get()
+    const direct = lostSnap.exists && directCandidate({ id: lostSnap.id, ...lostSnap.data() }, item)
+    if (direct) {
+      const i = candidates.findIndex((c) => c.lost.id === direct.lost.id)
+      if (i >= 0) candidates.splice(i, 1)
+      candidates.unshift(direct)
+    }
+  }
   logger.info(`item ${item.id} (${item.type}/${item.category}) → ${candidates.length} candidate(s)`)
 
   await Promise.all(
@@ -90,7 +102,9 @@ const onMatchCreated = onDocumentCreated(`${COL.matches}/{matchId}`, async (even
       ? `${formatDistance(match.distanceMeters)} from where it was lost`
       : match.reason === 'manual'
         ? 'linked by organization staff'
-        : 'in the same category and timeframe'
+        : match.reason === 'reported'
+          ? 'reported by the finder directly from your listing'
+          : 'in the same category and timeframe'
 
   const recipients = [
     {
@@ -131,7 +145,7 @@ const onMatchCreated = onDocumentCreated(`${COL.matches}/{matchId}`, async (even
 
 // ───────────── Status lifecycle ─────────────
 
-const MATCH_TO_ITEM_STATUS = { confirmed: 'matched', completed: 'claimed' }
+const MATCH_TO_ITEM_STATUS = { confirmed: 'matched', completed: 'resolved' }
 
 const onMatchUpdated = onDocumentUpdated(`${COL.matches}/{matchId}`, async (event) => {
   const before = event.data?.before.data()
@@ -153,9 +167,9 @@ const onMatchUpdated = onDocumentUpdated(`${COL.matches}/{matchId}`, async (even
         statusHistory: FieldValue.arrayUnion({
           status: itemStatus,
           by: 'system',
-          byName: 'FoundIt',
+          byName: 'Found4',
           at: Timestamp.now(),
-          note: after.status === 'confirmed' ? 'Match confirmed' : 'Handover completed',
+          note: after.status === 'confirmed' ? 'Match confirmed' : 'Returned to its owner',
         }),
       })
     })
@@ -217,9 +231,9 @@ const onInvitationCreated = onDocumentCreated(`${COL.invitations}/{token}`, asyn
 
   await queueEmail(db, mailCollection, {
     to: inv.email,
-    subject: `${inv.invitedByName} invited you to ${inv.orgName} on FoundIt`,
-    title: `Join ${inv.orgName} on FoundIt`,
-    body: `${inv.invitedByName} invited you to join ${inv.orgName} as ${role}. FoundIt is how ${inv.orgName} handles lost & found reports, QR asset tags and returns. The link expires in 7 days.`,
+    subject: `${inv.invitedByName} invited you to ${inv.orgName} on Found4`,
+    title: `Join ${inv.orgName} on Found4`,
+    body: `${inv.invitedByName} invited you to join ${inv.orgName} as ${role}. Found4 is how ${inv.orgName} handles lost & found reports, QR asset tags and returns. The link expires in 7 days.`,
     ctaText: 'Accept invitation',
     ctaUrl: link,
   })
@@ -306,6 +320,46 @@ const cloudinarySignature = onCall({ secrets: [CLOUDINARY_API_SECRET] }, (reques
   }
 })
 
+// ───────────── Organization deletion ─────────────
+
+// Security rules can't express a cascading delete (the owner's own member record is
+// undeletable from the client), so the owner calls this and the Admin SDK cleans up.
+const deleteOrganization = onCall({ timeoutSeconds: 300 }, async (request) => {
+  const auth = request.auth
+  if (!auth || auth.token.firebase?.sign_in_provider === 'anonymous') {
+    throw new HttpsError('unauthenticated', 'Sign in to delete an organization.')
+  }
+  const orgId = request.data?.orgId
+  if (typeof orgId !== 'string' || !orgId || orgId.includes('/')) {
+    throw new HttpsError('invalid-argument', 'Missing organization id.')
+  }
+
+  const orgRef = db.collection(COL.organizations).doc(orgId)
+  const [orgSnap, memberSnap] = await Promise.all([orgRef.get(), orgRef.collection(COL.members).doc(auth.uid).get()])
+  if (!orgSnap.exists) throw new HttpsError('not-found', 'This organization no longer exists.')
+  if (memberSnap.get('role') !== 'owner') {
+    throw new HttpsError('permission-denied', 'Only the owner can delete this organization.')
+  }
+
+  const [invitations, items, matches, assets] = await Promise.all(
+    [COL.invitations, COL.items, COL.matches, COL.assets].map((col) => db.collection(col).where('orgId', '==', orgId).get()),
+  )
+  const scanReports = await Promise.all(
+    assets.docs.map((a) => db.collection(COL.scanReports).where('assetId', '==', a.id).get()),
+  )
+
+  const writer = db.bulkWriter()
+  for (const snap of [invitations, items, matches, assets, ...scanReports]) snap.docs.forEach((d) => writer.delete(d.ref))
+  assets.docs.forEach((a) => writer.delete(db.collection(COL.publicAssets).doc(a.id)))
+  await writer.close()
+  // Members subcollection + the organization document itself.
+  await db.recursiveDelete(orgRef)
+
+  const counts = { items: items.size, matches: matches.size, invitations: invitations.size, assets: assets.size }
+  logger.info('organization deleted', { orgId, by: auth.uid, ...counts })
+  return counts
+})
+
 // Grouped export → deployed as `lofu-<name>` so names can't collide with other apps in the project.
 exports.lofu = {
   onItemCreated,
@@ -315,4 +369,5 @@ exports.lofu = {
   onInvitationCreated,
   onScanReportCreated,
   cloudinarySignature,
+  deleteOrganization,
 }

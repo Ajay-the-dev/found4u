@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { evaluatePair, textSimilarity, distanceMeters, scopesCompatible, datesCompatible } = require('../src/matching')
+const { evaluatePair, directCandidate, textSimilarity, distanceMeters, scopesCompatible, datesCompatible, withinTimeframe } = require('../src/matching')
 
 const base = { category: 'bag', status: 'open', orgId: null, description: '' }
 const lost = (over = {}) => ({ ...base, id: 'L1', type: 'lost', reporterId: 'owner', title: 'Black Jansport backpack', dateFrom: '2026-10-20', alertRadiusMeters: 500, location: { lat: 40.7128, lng: -74.006 }, ...over })
@@ -45,7 +45,34 @@ test('unknown-location lost reports match on description overlap', () => {
   const m = evaluatePair(lost({ location: null }), found())
   assert.equal(m.reason, 'category')
   assert.equal(m.distance, null)
-  assert.equal(evaluatePair(lost({ location: null, title: 'Red umbrella' }), found()), null)
+  // No shared words: still a candidate when it turned up in the loss window…
+  assert.equal(evaluatePair(lost({ location: null, title: 'Red umbrella' }), found()).reason, 'category')
+  // …but not weeks later.
+  assert.equal(evaluatePair(lost({ location: null, title: 'Red umbrella' }), found({ dateFound: '2026-11-20' })), null)
+})
+
+test('timeframe window covers the loss dates plus a few days', () => {
+  const l = { dateFrom: '2026-10-20', dateTo: '2026-10-22' }
+  assert.equal(withinTimeframe(l, { dateFound: '2026-10-21' }), true)
+  assert.equal(withinTimeframe(l, { dateFound: '2026-10-25' }), true)
+  assert.equal(withinTimeframe(l, { dateFound: '2026-10-26' }), false)
+  assert.equal(withinTimeframe(l, { dateFound: '2026-10-19' }), false)
+})
+
+test('plurals compare equal', () => {
+  assert.equal(textSimilarity({ title: 'black sunglasses' }, { title: 'sunglass case' }), 0.5)
+  assert.equal(textSimilarity({ title: 'glasses' }, { title: 'glass' }), 1)
+  assert.equal(textSimilarity({ title: 'car keys' }, { title: 'key fob' }), 0.5)
+})
+
+test('"I found this" links directly, regardless of distance or wording', () => {
+  const far = found({ title: 'Bag', location: { lat: 41.5, lng: -74 } })
+  const m = directCandidate(lost(), far)
+  assert.equal(m.reason, 'reported')
+  assert.equal(m.score, 100)
+  assert.equal(directCandidate(lost(), found({ reporterId: 'owner' })), null)
+  assert.equal(directCandidate(lost({ status: 'claimed' }), found()), null)
+  assert.equal(directCandidate(lost({ orgId: 'a' }), found({ orgId: 'b' })), null)
 })
 
 test('text similarity ignores stop words', () => {

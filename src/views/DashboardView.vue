@@ -47,6 +47,16 @@ async function confirmMatch(m) {
   }
 }
 
+async function completeMatch(m) {
+  if (!(await ui.confirm({ title: 'Mark as returned?', message: `Both “${m.lostTitle}” and “${m.foundTitle}” will be marked as resolved.`, confirmText: 'Yes, returned', variant: 'success' }))) return
+  try {
+    await items.updateMatch(m.id, { status: 'completed' })
+    ui.toast('Marked as returned 🎉', 'success', { body: 'Both reports are now resolved.' })
+  } catch (err) {
+    ui.error(err, 'Could not update match')
+  }
+}
+
 async function dismissMatch(m) {
   if (!(await ui.confirm({ title: 'Dismiss this match?', message: "We'll stop suggesting these two items to each other.", confirmText: 'Dismiss', variant: 'secondary' }))) return
   try {
@@ -73,32 +83,33 @@ function openNotification(n) {
 
 <template>
   <div class="container py-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-      <div>
-        <h1 class="h3 mb-1">Hi {{ firstName }} 👋</h1>
-        <p class="text-secondary mb-0">
-          Working in <strong>{{ org.currentOrg?.name || 'the public network' }}</strong>
-          <RoleBadge v-if="org.currentRole" :role="org.currentRole" class="ms-1" />
+    <div class="page-header d-flex flex-wrap justify-content-between align-items-end gap-3">
+      <div v-reveal="{ y: 12 }">
+        <div class="eyebrow mb-1">{{ org.currentOrg?.name || 'Public network' }}</div>
+        <h1 class="mb-1">Welcome back, {{ firstName }}</h1>
+        <p class="text-secondary mb-0 d-flex align-items-center gap-2">
+          Here's what's happening with your items today.
+          <RoleBadge v-if="org.currentRole" :role="org.currentRole" />
         </p>
       </div>
-      <div class="d-flex flex-wrap gap-2">
+      <div v-reveal.stagger="{ y: 8, delay: 0.1 }" class="d-none d-md-flex flex-wrap gap-2">
+        <RouterLink to="/assets/new" class="btn btn-outline-secondary"><i class="bi bi-qr-code me-1"></i>Tag an asset</RouterLink>
         <RouterLink to="/report/lost" class="btn btn-outline-danger"><i class="bi bi-question-circle me-1"></i>I lost something</RouterLink>
-        <RouterLink to="/report/found" class="btn btn-success"><i class="bi bi-box2-heart me-1"></i>I found something</RouterLink>
-        <RouterLink to="/assets/new" class="btn btn-outline-primary"><i class="bi bi-qr-code me-1"></i>Tag an asset</RouterLink>
+        <RouterLink to="/report/found" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>I found something</RouterLink>
       </div>
     </div>
 
-    <div class="row g-3 mb-4">
+    <div v-reveal.stagger class="row g-3 mb-4">
       <div v-for="s in stats" :key="s.label" class="col-6 col-lg-3">
         <div class="card stat-card h-100">
-          <div class="card-body d-flex align-items-center gap-3">
-            <span class="stat-icon" :class="`tone-${s.tone}`">
-              <i class="bi" :class="s.icon"></i>
-            </span>
-            <div>
-              <div class="h4 mb-0">{{ s.value }}</div>
-              <div class="small text-secondary">{{ s.label }}</div>
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+              <span class="stat-label">{{ s.label }}</span>
+              <span class="stat-icon" :class="`tone-${s.tone}`">
+                <i class="bi" :class="s.icon"></i>
+              </span>
             </div>
+            <div v-count-up="s.value" class="stat-value">0</div>
           </div>
         </div>
       </div>
@@ -108,14 +119,15 @@ function openNotification(n) {
       <div class="col-lg-8">
         <!-- Matches -->
         <section v-if="openMatches.length" class="mb-4">
-          <h2 class="h5 mb-3"><i class="bi bi-radar text-primary me-2"></i>Potential matches</h2>
-          <div class="d-flex flex-column gap-3">
+          <h2 class="section-title mb-3 d-flex align-items-center gap-2"><span class="stat-icon tone-primary rounded-3 d-inline-flex align-items-center justify-content-center" style="width: 1.75rem; height: 1.75rem; font-size: 0.85rem"><i class="bi bi-radar"></i></span>Potential matches</h2>
+          <div v-reveal.stagger class="d-flex flex-column gap-3">
             <MatchCard
               v-for="m in openMatches"
               :key="m.id"
               :match="m"
               :perspective="perspectiveFor(m)"
               @confirm="confirmMatch"
+              @complete="completeMatch"
               @dismiss="dismissMatch"
               @chat="chatAboutMatch"
             />
@@ -125,17 +137,19 @@ function openNotification(n) {
         <!-- Reports -->
         <section>
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h5 mb-0">Your active reports</h2>
-            <RouterLink to="/items" class="small">Browse all <i class="bi bi-arrow-right"></i></RouterLink>
+            <h2 class="section-title mb-0">Your active reports</h2>
+            <RouterLink to="/items" class="small fw-medium text-decoration-none">Browse all <i class="bi bi-arrow-right"></i></RouterLink>
           </div>
           <LoadingSpinner v-if="items.mineLoading" />
-          <div v-else-if="activeItems.length" class="row g-3">
+          <div v-else-if="activeItems.length" v-reveal.stagger class="row g-3 item-grid">
             <div v-for="item in activeItems" :key="item.id" class="col-sm-6 col-xl-4">
               <ItemCard :item="item" />
             </div>
           </div>
           <div v-else class="card">
-            <EmptyState icon="bi-clipboard-check" title="No active reports" text="When you report a lost or found item, it'll show up here with live match alerts." />
+            <EmptyState icon="bi-clipboard-check" title="No active reports" text="When you report a lost or found item, it'll show up here with live match alerts.">
+              <RouterLink to="/report/lost" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Create a report</RouterLink>
+            </EmptyState>
           </div>
 
           <details v-if="closedItems.length" class="mt-4">
@@ -147,17 +161,17 @@ function openNotification(n) {
         </section>
       </div>
 
-      <div class="col-lg-4">
+      <div v-reveal="{ delay: 0.15 }" class="col-lg-4">
         <!-- Notifications -->
         <div class="card mb-4">
-          <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <strong class="small"><i class="bi bi-bell me-1"></i>Recent alerts</strong>
-            <RouterLink to="/notifications" class="small">All</RouterLink>
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong class="text-body fw-semibold">Recent alerts</strong>
+            <RouterLink to="/notifications" class="small fw-medium text-decoration-none">View all</RouterLink>
           </div>
           <div v-if="!notifications.latest.length" class="card-body small text-secondary">No alerts yet. We'll ping you when something matches.</div>
           <div class="list-group list-group-flush">
-            <button v-for="n in notifications.latest.slice(0, 5)" :key="n.id" class="list-group-item list-group-item-action d-flex gap-2" :class="{ 'bg-primary-subtle': !n.read }" @click="openNotification(n)">
-              <i class="bi text-primary mt-1" :class="NOTIFICATION_ICONS[n.type] || NOTIFICATION_ICONS.default"></i>
+            <button v-for="n in notifications.latest.slice(0, 5)" :key="n.id" class="list-group-item list-group-item-action d-flex gap-3" :class="{ 'bg-primary-subtle': !n.read }" @click="openNotification(n)">
+              <span class="stat-icon tone-primary rounded-3 d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width: 2rem; height: 2rem"><i class="bi" :class="NOTIFICATION_ICONS[n.type] || NOTIFICATION_ICONS.default"></i></span>
               <span class="min-w-0">
                 <span class="d-block small fw-semibold">{{ n.title }}</span>
                 <span class="d-block small text-secondary text-truncate">{{ n.body }}</span>
@@ -169,17 +183,18 @@ function openNotification(n) {
 
         <!-- Organizations -->
         <div class="card">
-          <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <strong class="small"><i class="bi bi-diagram-3 me-1"></i>Your organizations</strong>
-            <RouterLink to="/orgs/new" class="small">New</RouterLink>
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong class="text-body fw-semibold">Your organizations</strong>
+            <RouterLink to="/orgs/new" class="small fw-medium text-decoration-none"><i class="bi bi-plus-lg me-1"></i>New</RouterLink>
           </div>
           <div v-if="!org.myOrgs.length" class="card-body small text-secondary">
             You're not in any organization yet. <RouterLink to="/orgs/new">Create one</RouterLink> or ask an admin to invite you.
           </div>
           <div class="list-group list-group-flush">
-            <div v-for="o in org.myOrgs" :key="o.id" class="list-group-item d-flex align-items-center gap-2">
-              <RouterLink :to="`/orgs/${o.id}`" class="flex-grow-1 text-truncate text-decoration-none">{{ o.name }}</RouterLink>
-              <RouterLink v-if="atLeast(o.role, 'staff')" :to="`/orgs/${o.id}/command`" class="btn btn-sm btn-outline-primary py-0" title="Command center"><i class="bi bi-broadcast"></i></RouterLink>
+            <div v-for="o in org.myOrgs" :key="o.id" class="list-group-item d-flex align-items-center gap-3">
+              <span class="stat-icon tone-violet rounded-3 d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width: 2rem; height: 2rem"><i class="bi bi-building"></i></span>
+              <RouterLink :to="`/orgs/${o.id}`" class="flex-grow-1 text-truncate text-decoration-none text-body fw-medium">{{ o.name }}</RouterLink>
+              <RouterLink v-if="atLeast(o.role, 'staff')" :to="`/orgs/${o.id}/command`" class="btn btn-sm btn-outline-secondary" title="Command center"><i class="bi bi-broadcast"></i></RouterLink>
               <RoleBadge :role="o.role" />
             </div>
           </div>

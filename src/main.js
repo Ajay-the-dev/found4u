@@ -1,14 +1,15 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 
+import '@fontsource-variable/inter'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap-icons/font/bootstrap-icons.css'
-import 'leaflet/dist/leaflet.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import './assets/main.css'
 
 import { isFirebaseConfigured } from './services/firebase'
 import { friendlyError } from './utils/errors'
+import { motion } from './utils/motion'
 import App from './App.vue'
 import SetupRequiredView from './views/SetupRequiredView.vue'
 
@@ -22,6 +23,7 @@ async function bootstrap() {
   const app = createApp(App)
   const pinia = createPinia()
   app.use(pinia)
+  app.use(motion)
 
   // Stores are imported after Pinia is installed.
   const [{ useAuthStore }, { useUiStore }, { default: router }] = await Promise.all([

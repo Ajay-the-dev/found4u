@@ -10,11 +10,11 @@ function renderEmail({ title, body, ctaText, ctaUrl }) {
   return `<!doctype html><html><body style="margin:0;background:#f6f7fb;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
     <table role="presentation" width="100%" style="max-width:520px;background:#fff;border-radius:14px;padding:28px" cellpadding="0" cellspacing="0">
-      <tr><td style="font-weight:700;font-size:18px;color:#4f46e5;padding-bottom:16px">🔎 FoundIt</td></tr>
+      <tr><td style="font-weight:700;font-size:18px;color:#4f46e5;padding-bottom:16px">📍 Found4</td></tr>
       <tr><td style="font-size:20px;font-weight:600;color:#111827;padding-bottom:8px">${escapeHtml(title)}</td></tr>
       <tr><td style="font-size:15px;line-height:1.55;color:#4b5563;padding-bottom:24px">${escapeHtml(body)}</td></tr>
-      ${ctaUrl ? `<tr><td><a href="${escapeHtml(ctaUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600">${escapeHtml(ctaText || 'Open FoundIt')}</a></td></tr>` : ''}
-      <tr><td style="font-size:12px;color:#9ca3af;padding-top:28px">You can turn off email alerts in FoundIt → Profile &amp; alerts.</td></tr>
+      ${ctaUrl ? `<tr><td><a href="${escapeHtml(ctaUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600">${escapeHtml(ctaText || 'Open Found4')}</a></td></tr>` : ''}
+      <tr><td style="font-size:12px;color:#9ca3af;padding-top:28px">You can turn off email alerts in Found4 → Profile &amp; alerts.</td></tr>
     </table>
   </td></tr></table></body></html>`
 }
@@ -64,7 +64,7 @@ async function notifyUsers(db, recipients, { appUrl, mailCollection, email = tru
         subject: r.title,
         title: r.title,
         body: r.body,
-        ctaText: r.ctaText || 'View in FoundIt',
+        ctaText: r.ctaText || 'View in Found4',
         ctaUrl: r.link ? `${appUrl}${r.link}` : appUrl,
       })
     }),

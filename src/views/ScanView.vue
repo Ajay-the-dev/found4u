@@ -9,6 +9,7 @@ import { getCurrentPosition } from '@/utils/geo'
 import { friendlyError } from '@/utils/errors'
 import ChatThread from '@/components/chat/ChatThread.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -87,7 +88,7 @@ async function ping() {
   <div class="hero min-vh-100 py-4">
     <div class="container" style="max-width: 560px">
       <div class="text-center mb-3">
-        <RouterLink to="/" class="fw-bold text-decoration-none text-body"><i class="bi bi-search-heart text-primary me-1"></i>FoundIt</RouterLink>
+        <RouterLink to="/" class="fw-bold text-decoration-none text-body"><BrandLogo class="text-primary me-1" />Found4</RouterLink>
       </div>
 
       <LoadingSpinner v-if="loading" label="Looking up this tag…" />
@@ -159,7 +160,7 @@ async function ping() {
         </template>
       </template>
 
-      <p class="text-center small text-secondary mt-4">Powered by FoundIt · <RouterLink to="/register">Protect your own things</RouterLink></p>
+      <p class="text-center small text-secondary mt-4">Powered by Found4 · <RouterLink to="/register">Protect your own things</RouterLink></p>
     </div>
   </div>
 </template>

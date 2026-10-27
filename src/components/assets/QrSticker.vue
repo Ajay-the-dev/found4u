@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import QRCode from 'qrcode'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 
 const props = defineProps({
   assetId: { type: String, required: true },
@@ -38,7 +39,7 @@ defineExpose({ dataUrl, scanUrl })
     <div v-if="showName && name" class="small fw-semibold text-truncate">{{ name }}</div>
     <div class="qr-id small">{{ assetId }}</div>
     <div class="text-secondary" style="font-size: 0.65rem">
-      <i class="bi bi-search-heart"></i> FoundIt<span v-if="orgName"> · {{ orgName }}</span> · reward-friendly, owner stays private
+      <BrandLogo /> Found4<span v-if="orgName"> · {{ orgName }}</span> · reward-friendly, owner stays private
     </div>
   </div>
 </template>

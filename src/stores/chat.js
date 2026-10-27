@@ -31,7 +31,19 @@ export const useChatStore = defineStore('chat', () => {
     const seen = chat.lastRead?.[auth.uid]?.toMillis?.() ?? 0
     return chat.lastMessageAt.toMillis() > seen
   }
-  const unreadCount = computed(() => chats.value.filter(isUnread).length)
+  /** When the current user deleted this chat for themselves, or null. */
+  const clearedAt = (chat) => {
+    const auth = useAuthStore()
+    return chat.hiddenFor?.[auth.uid] ?? null
+  }
+  // A chat deleted by the user stays hidden until a newer message arrives.
+  const isHidden = (chat) => {
+    const cleared = clearedAt(chat)?.toMillis?.()
+    if (cleared == null) return false
+    return (chat.lastMessageAt?.toMillis?.() ?? 0) <= cleared
+  }
+  const visibleChats = computed(() => chats.value.filter((c) => !isHidden(c)))
+  const unreadCount = computed(() => visibleChats.value.filter(isUnread).length)
 
   function bind(uid) {
     if (uid === boundUid) return
@@ -146,6 +158,15 @@ export const useChatStore = defineStore('chat', () => {
     await batch.commit()
   }
 
+  /** Deletes the conversation for the current user only; the other participant keeps it. */
+  function deleteChat(chatId) {
+    const auth = useAuthStore()
+    return updateDoc(doc(db, COL.chats, chatId), {
+      [`hiddenFor.${auth.uid}`]: serverTimestamp(),
+      [`lastRead.${auth.uid}`]: serverTimestamp(),
+    })
+  }
+
   function markRead(chatId) {
     const auth = useAuthStore()
     if (!auth.uid) return Promise.resolve()
@@ -154,9 +175,11 @@ export const useChatStore = defineStore('chat', () => {
 
   return {
     chats,
+    visibleChats,
     loading,
     unreadCount,
     isUnread,
+    clearedAt,
     bind,
     ensureChat,
     openItemChat,
@@ -164,6 +187,7 @@ export const useChatStore = defineStore('chat', () => {
     watchChat,
     watchMessages,
     sendMessage,
+    deleteChat,
     markRead,
   }
 })

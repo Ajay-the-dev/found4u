@@ -1,8 +1,8 @@
 rules_version = '2';
 
-// FoundIt — Firestore security rules
+// Found4 — Firestore security rules
 //
-// SHARED DATABASE: every FoundIt collection is prefixed `lofu_`. A project has ONE ruleset per
+// SHARED DATABASE: every Found4 collection is prefixed `lofu_`. A project has ONE ruleset per
 // database, so deploying this file replaces the rules of every other app in it. Merge the
 // `match` blocks and helper functions below into your existing rules file instead (rename any
 // helper that clashes, e.g. signedIn/uid/rank), and make sure no broad `match /{document=**}`

@@ -1,6 +1,6 @@
 {
-  "name": "foundit-functions",
-  "description": "FoundIt Cloud Functions — geofenced match engine, notifications, emails, Cloudinary signing",
+  "name": "found4-functions",
+  "description": "Found4 Cloud Functions — geofenced match engine, notifications, emails, Cloudinary signing",
   "private": true,
   "main": "index.js",
   "engines": {

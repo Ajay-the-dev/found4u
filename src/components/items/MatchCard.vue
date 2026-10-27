@@ -18,6 +18,7 @@ const reasonLabel = computed(
       proximity: `Found ${formatDistance(props.match.distanceMeters)} from the lost location`,
       category: 'Same category & timeframe (lost location unknown)',
       manual: 'Linked manually by staff',
+      reported: 'Finder reported it from your listing',
     })[props.match.reason] || 'Potential match',
 )
 </script>
@@ -75,7 +76,13 @@ const reasonLabel = computed(
           <button class="btn btn-sm btn-outline-primary" @click="$emit('handover', match)"><i class="bi bi-calendar-event me-1"></i>Schedule handover</button>
           <button class="btn btn-sm btn-success" @click="$emit('complete', match)"><i class="bi bi-bag-check me-1"></i>Mark handed over</button>
         </template>
-        <button v-if="perspective !== 'staff' && match.status !== 'dismissed'" class="btn btn-sm btn-outline-primary" @click="$emit('chat', match)">
+        <button v-if="perspective === 'lost' && ['pending', 'confirmed'].includes(match.status)" class="btn btn-sm btn-success" @click="$emit('complete', match)">
+          <i class="bi bi-bag-check me-1"></i>I got it back
+        </button>
+        <button v-if="perspective === 'found' && match.status === 'confirmed'" class="btn btn-sm btn-outline-success" @click="$emit('complete', match)">
+          <i class="bi bi-bag-check me-1"></i>Returned to owner
+        </button>
+        <button v-if="perspective !== 'staff' && !['dismissed', 'completed'].includes(match.status)" class="btn btn-sm btn-outline-primary" @click="$emit('chat', match)">
           <i class="bi bi-chat-dots me-1"></i>Message {{ perspective === 'lost' ? 'finder' : 'owner' }}
         </button>
       </div>

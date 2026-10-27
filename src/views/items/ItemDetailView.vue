@@ -110,6 +110,27 @@ async function saveStatus() {
   }
 }
 
+// One-tap close for the reporter. With a confirmed match, completing it resolves both sides.
+const canMarkReturned = computed(() => isReporter.value && ['open', 'under_review', 'matched'].includes(item.value?.status))
+async function markReturned() {
+  const confirmed = matches.value.find((m) => m.status === 'confirmed')
+  if (confirmed) return setMatchStatus(confirmed, 'completed')
+  const lost = item.value.type === 'lost'
+  const ok = await ui.confirm({
+    title: lost ? 'Got it back?' : 'Returned to its owner?',
+    message: 'This report will be marked as resolved and stop matching with new items.',
+    confirmText: 'Mark resolved',
+    variant: 'success',
+  })
+  if (!ok) return
+  try {
+    await itemStore.updateStatus(item.value.id, 'resolved', lost ? 'Owner got it back' : 'Returned to its owner')
+    ui.toast('Marked as resolved 🎉', 'success')
+  } catch (err) {
+    ui.error(err, 'Could not update status')
+  }
+}
+
 async function contactReporter() {
   try {
     const id = await chat.openItemChat(item.value, { asStaffOf: isStaff.value ? item.value.orgId : null })
@@ -132,6 +153,10 @@ async function remove() {
 }
 
 async function setMatchStatus(m, status) {
+  if (status === 'completed') {
+    const ok = await ui.confirm({ title: 'Mark as returned?', message: `Both “${m.lostTitle}” and “${m.foundTitle}” will be marked as resolved.`, confirmText: 'Yes, returned', variant: 'success' })
+    if (!ok) return
+  }
   try {
     await itemStore.updateMatch(m.id, { status })
     ui.toast(status === 'confirmed' ? 'Match confirmed' : status === 'completed' ? 'Marked as handed over' : 'Match dismissed')
@@ -259,9 +284,21 @@ async function chatAboutMatch(m) {
               </dl>
 
               <div class="d-grid gap-2 mt-3">
-                <button v-if="!isReporter" class="btn btn-primary" @click="contactReporter">
-                  <i class="bi bi-chat-dots me-1"></i>{{ item.type === 'found' ? 'This might be mine — message the finder' : 'I may have found this — message the owner' }}
+                <button v-if="canMarkReturned" class="btn btn-success" @click="markReturned">
+                  <i class="bi bi-bag-check me-1"></i>{{ item.type === 'lost' ? 'I got it back' : 'Returned to its owner' }}
                 </button>
+                <template v-if="!isReporter">
+                  <RouterLink
+                    v-if="item.type === 'lost' && ['open', 'under_review'].includes(item.status)"
+                    :to="{ name: 'report-found', query: { lost: item.id } }"
+                    class="btn btn-success"
+                  >
+                    <i class="bi bi-box2-heart me-1"></i>I found this item
+                  </RouterLink>
+                  <button class="btn" :class="item.type === 'lost' ? 'btn-outline-secondary' : 'btn-primary'" @click="contactReporter">
+                    <i class="bi bi-chat-dots me-1"></i>{{ item.type === 'found' ? 'This might be mine — message the finder' : 'Message the owner' }}
+                  </button>
+                </template>
               </div>
             </div>
           </div>

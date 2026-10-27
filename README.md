@@ -1,6 +1,6 @@
-# FoundIt — Lost & Found for organizations
+# Found4 — Lost & Found for organizations
 
-FoundIt is a lost-and-found web app for campuses, offices and transit hubs. People report lost items (with a map pin or without a location) and log found items. A geofenced match engine alerts owners when something turns up inside their alert radius. QR asset tags let finders contact owners anonymously, and staff run returns from a live command center.
+Found4 is a lost-and-found web app for campuses, offices and transit hubs. People report lost items (with a map pin or without a location) and log found items. A geofenced match engine alerts owners when something turns up inside their alert radius. QR asset tags let finders contact owners anonymously, and staff run returns from a live command center.
 
 > **Shared Firebase project:** every Firestore collection is prefixed `lofu_`, Storage uploads live under `lofu/`, functions deploy as `lofu-*` in their own `lofu` codebase, and hosting uses a `lofu` target. Read [Deploying into an existing project](#deploying-into-an-existing-project) before running any `firebase deploy`.
 
@@ -130,7 +130,7 @@ firebase ext:install firebase/firestore-send-email
 
 - *Email documents collection*: `lofu_mail` (or skip installing and set `MAIL_COLLECTION` to the collection an already-installed instance watches)
 - *SMTP connection URI*: e.g. `smtps://user:password@smtp.sendgrid.net:465` (SendGrid, Mailgun, SES or Gmail app password)
-- *Default FROM address*: e.g. `FoundIt <noreply@yourdomain.com>`
+- *Default FROM address*: e.g. `Found4 <noreply@yourdomain.com>`
 
 Without the extension everything else still works. Emails just stay queued, and admins can copy invite links from the Members page.
 
@@ -161,7 +161,7 @@ Verification and password-reset links appear in the Emulator UI (http://localhos
 
 ### 8. Deploy hosting
 
-FoundIt deploys to its own Hosting site through the `lofu` target, so it never overwrites your existing site:
+Found4 deploys to its own Hosting site through the `lofu` target, so it never overwrites your existing site:
 
 ```bash
 firebase hosting:sites:create your-lofu-site
@@ -179,7 +179,7 @@ Add `your-lofu-site.web.app` under *Authentication → Settings → Authorized d
 
 ## Deploying into an existing project
 
-FoundIt is namespaced so it can share a Firebase project with other apps:
+Found4 is namespaced so it can share a Firebase project with other apps:
 
 | Resource | Namespace | What could go wrong if you deploy naively |
 | --- | --- | --- |
@@ -195,12 +195,12 @@ FoundIt is namespaced so it can share a Firebase project with other apps:
 
 1. Copy the helper functions and every `match /lofu_…` block from `firestore.rules` into your existing rules file, inside `match /databases/{database}/documents { … }`.
 2. If a helper name clashes with one of yours (`signedIn`, `uid`, `rank`, `isMember` …), rename one set. The CLI will refuse to compile duplicates, so you'll notice.
-3. Check your existing rules for a broad `match /{document=**}` (or `/{collection}/{doc}`) that allows access. Rules are OR-ed, so it would bypass FoundIt's RBAC. Narrow it to exclude `lofu_` collections, e.g. `if !collection.matches('lofu_.*') && …`.
+3. Check your existing rules for a broad `match /{document=**}` (or `/{collection}/{doc}`) that allows access. Rules are OR-ed, so it would bypass Found4's RBAC. Narrow it to exclude `lofu_` collections, e.g. `if !collection.matches('lofu_.*') && …`.
 4. Deploy the merged file, then run `npm run test:rules` against a copy of it to confirm.
 
 Do the same for `storage.rules`: copy the `match /lofu/uploads/…` block into your bucket's rules.
 
-Auth users are shared by design: an account in your other app can sign in to FoundIt, and vice versa. FoundIt keeps its own profile documents in `lofu_users`.
+Auth users are shared by design: an account in your other app can sign in to Found4, and vice versa. Found4 keeps its own profile documents in `lofu_users`.
 
 ---
 

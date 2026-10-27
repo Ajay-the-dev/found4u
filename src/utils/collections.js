@@ -1,4 +1,4 @@
-// Every Firestore collection is namespaced with `lofu_` so FoundIt can share a database
+// Every Firestore collection is namespaced with `lofu_` so Found4 can share a database
 // with other apps. Keep in sync with functions/src/collections.js and firestore.rules.
 export const COLLECTION_PREFIX = 'lofu_'
 

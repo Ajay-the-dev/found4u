@@ -71,7 +71,7 @@ async function accept(inv) {
         <RouterLink to="/orgs/new" class="btn btn-sm btn-primary">Create organization</RouterLink>
       </EmptyState>
     </div>
-    <div v-else class="row g-3">
+    <div v-else v-reveal.stagger class="row g-3">
       <div v-for="o in org.myOrgs" :key="o.id" class="col-md-6 col-xl-4">
         <div class="card h-100 card-hover">
           <div class="card-body">

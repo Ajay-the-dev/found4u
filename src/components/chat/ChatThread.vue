@@ -12,6 +12,8 @@ const props = defineProps({
   chatId: { type: String, required: true },
   participantInfo: { type: Object, default: () => ({}) },
   height: { type: String, default: '60vh' },
+  // Messages up to this time were deleted by the current user and stay hidden for them.
+  clearedAt: { type: Object, default: null },
 })
 
 const chat = useChatStore()
@@ -57,8 +59,13 @@ const nameOf = (uid) => props.participantInfo?.[uid]?.name || 'Participant'
 const mine = (m) => m.senderId === auth.uid
 
 // Group consecutive messages from the same sender so names only show once.
+const visible = computed(() => {
+  const cleared = props.clearedAt?.toMillis?.()
+  if (cleared == null) return messages.value
+  return messages.value.filter((m) => (m.createdAt?.toMillis?.() ?? Infinity) > cleared)
+})
 const rows = computed(() =>
-  messages.value.map((m, i) => ({ ...m, showName: i === 0 || messages.value[i - 1].senderId !== m.senderId })),
+  visible.value.map((m, i) => ({ ...m, showName: i === 0 || visible.value[i - 1].senderId !== m.senderId })),
 )
 
 async function send() {
@@ -96,11 +103,11 @@ function onKeydown(e) {
 </script>
 
 <template>
-  <div class="d-flex flex-column border rounded-3 bg-body-tertiary" :style="{ height }">
+  <div class="chat-thread d-flex flex-column border rounded-3 bg-body-tertiary" :style="{ height }">
     <div ref="scroller" class="chat-scroll flex-grow-1 p-3">
       <LoadingSpinner v-if="loading" label="Loading conversation…" />
       <ErrorAlert v-else-if="error" :error="error" />
-      <div v-else-if="!messages.length" class="text-center text-secondary small py-5">
+      <div v-else-if="!visible.length" class="text-center text-secondary small py-5">
         <i class="bi bi-chat-square-text fs-3 d-block mb-2"></i>No messages yet — say hello.
       </div>
       <div v-for="m in rows" :key="m.id" class="d-flex flex-column mb-2" :class="mine(m) ? 'align-items-end' : 'align-items-start'">

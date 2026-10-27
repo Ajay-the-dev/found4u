@@ -56,7 +56,7 @@ const participantInfo = computed(() => ({ ...(chat.value?.participantInfo || {})
 </script>
 
 <template>
-  <div class="container py-4" style="max-width: 820px">
+  <div class="container py-4 chat-view" style="max-width: 820px">
     <LoadingSpinner v-if="loading" />
     <div v-else-if="error" class="card">
       <EmptyState v-if="isPermissionError(error)" icon="bi-lock" title="You're not part of this conversation" />
@@ -72,8 +72,8 @@ const participantInfo = computed(() => ({ ...(chat.value?.participantInfo || {})
         </div>
         <RouterLink v-if="contextLink" :to="contextLink.to" class="btn btn-sm btn-outline-primary">{{ contextLink.label }}</RouterLink>
       </div>
-      <ChatThread :chat-id="chat.id" :participant-info="participantInfo" height="calc(100vh - 260px)" />
-      <p class="small text-secondary mt-2"><i class="bi bi-shield-check me-1"></i>Meet in a public place or at an official lost-and-found desk for handovers.</p>
+      <ChatThread :chat-id="chat.id" :participant-info="participantInfo" :cleared-at="chatStore.clearedAt(chat)" height="calc(100vh - 260px)" />
+      <p class="small text-secondary mt-2 d-none d-md-block"><i class="bi bi-shield-check me-1"></i>Meet in a public place or at an official lost-and-found desk for handovers.</p>
     </template>
   </div>
 </template>
