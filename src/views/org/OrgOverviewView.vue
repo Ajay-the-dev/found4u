@@ -65,7 +65,7 @@ async function leave() {
     <template v-else>
       <div class="card mb-4">
         <div class="card-body d-flex flex-wrap gap-3 align-items-center">
-          <span class="stat-icon tone-primary" style="width: 3.5rem; height: 3.5rem; font-size: 1.6rem"><i class="bi" :class="typeMeta.icon"></i></span>
+          <span class="stat-icon tone-primary d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width: 3.5rem; height: 3.5rem; font-size: 1.6rem; border-radius: 0.9rem"><i class="bi" :class="typeMeta.icon"></i></span>
           <div class="flex-grow-1 min-w-0">
             <h1 class="h4 mb-1">{{ info.name }}</h1>
             <div class="small text-secondary">
